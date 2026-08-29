@@ -1,0 +1,33 @@
+# The full paper probe corpus contains gated GPQA examples and must be built
+# locally after accepting the official GPQA access conditions.
+data/selected_data/ABLE_dataset_1200.jsonl
+
+# Do not accidentally commit locally downloaded GPQA source files.
+data/selected_data/gpqa_*.csv
+data/selected_data/gpqa_*.jsonl
+
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and package builds
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Local model caches, outputs, and logs (repository root only)
+/.cache/
+/models/
+/able/
+/log/
+
+# Local secrets and editor/OS files
+.env
+.DS_Store
+.idea/
+.vscode/

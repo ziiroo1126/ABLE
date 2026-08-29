@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "able-llm"
+version = "0.1.0"
+description = "Attribution-Based Large-model Embedding construction toolkit"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [
+  {name = "Zirui Wang", email = "wangzr519@gmail.com"},
+  {name = "Yusen Hou"},
+  {name = "Shaofeng Liang"},
+  {name = "Bowen Tian"},
+  {name = "Yanlin Zhang"},
+  {name = "Wenshuo Chen"},
+  {name = "Yutao Yue"},
+]
+dynamic = ["dependencies"]
+
+[project.urls]
+Paper = "https://arxiv.org/abs/2606.07524"
+Repository = "https://github.com/ziiroo1126/ABLE"
+
+[project.scripts]
+able-calculate = "src.calculate_able:main"
+able-convert = "src.token_to_word_attribution:main"
+able-project = "src.process_able_features:main"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "config*"]
+namespaces = true

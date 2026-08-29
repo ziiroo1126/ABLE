@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b1020">
+    <meta name="description" content="ABLE represents and maps language models through compact, cross-tokenizer attribution-space embeddings.">
+    <title>ABLE — Attribution-Based Large-model Embedding</title>
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="ABLE — Attribution-Based Large-model Embedding">
+    <meta property="og:description" content="A training-free framework for representing and mapping LLMs in attribution space.">
+    <meta property="og:url" content="https://ziiroo1126.github.io/ABLE/">
+    <meta property="og:image" content="https://ziiroo1126.github.io/ABLE/static/method.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="ABLE — Attribution-Based Large-model Embedding">
+    <meta name="twitter:description" content="Representing and mapping LLMs through model-level input-dependence patterns.">
+    <meta name="twitter:image" content="https://ziiroo1126.github.io/ABLE/static/method.png">
+
+    <link rel="icon" href="static/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="static/styles.css">
+    <script src="static/script.js" defer></script>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <header class="site-header" data-header>
+      <nav class="nav shell" aria-label="Primary navigation">
+        <a class="brand" href="#top" aria-label="ABLE home">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>ABLE</span>
+        </a>
+
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links" data-nav-toggle>
+          <span class="sr-only">Toggle navigation</span>
+          <span></span><span></span><span></span>
+        </button>
+
+        <div class="nav-links" id="nav-links" data-nav-links>
+          <a href="#overview">Overview</a>
+          <a href="#method">Method</a>
+          <a href="#results">Results</a>
+          <a href="#quickstart">Quick start</a>
+          <a href="#citation">Citation</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top">
+        <div class="hero-glow hero-glow-one" aria-hidden="true"></div>
+        <div class="hero-glow hero-glow-two" aria-hidden="true"></div>
+        <div class="shell hero-grid">
+          <div class="hero-copy" data-reveal>
+            <div class="eyebrow"><span></span> EMNLP 2026 Main</div>
+            <h1>
+              <span class="title-accent">ABLE</span>
+              <small>Representing and Mapping LLMs via Attribution-Based Large-model Embedding</small>
+            </h1>
+            <p class="hero-lede">
+              A training-free framework that represents language models by
+              <strong>how they depend on shared input evidence</strong>, not only by their parameters or final outputs.
+            </p>
+
+            <div class="authors" aria-label="Authors">
+              <span>Zirui Wang<sup>1,2</sup></span>
+              <span>Yusen Hou<sup>1</sup></span>
+              <span>Shaofeng Liang<sup>1,2</sup></span>
+              <span>Bowen Tian<sup>1,2</sup></span>
+              <span>Yanlin Zhang<sup>1</sup></span>
+              <span>Wenshuo Chen<sup>1,2,*</sup></span>
+              <span>Yutao Yue<sup>1,2,*</sup></span>
+            </div>
+            <p class="affiliations">
+              <sup>1</sup>The Hong Kong University of Science and Technology (Guangzhou)<br>
+              <sup>2</sup>Deep Interdisciplinary Intelligence Lab (DI<sup>2</sup>Lab) · <sup>*</sup>Corresponding authors
+            </p>
+
+            <div class="hero-actions" aria-label="Project links">
+              <a class="button button-primary" href="https://arxiv.org/abs/2606.07524" target="_blank" rel="noreferrer">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6zM14 3v5h5M9 13h8M9 17h6"/></svg>
+                Paper
+              </a>
+              <a class="button button-secondary" href="https://github.com/ziiroo1126/ABLE" target="_blank" rel="noreferrer">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.58 9.58 0 0 1 12 6.82a9.6 9.6 0 0 1 2.5.34c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
+                Code
+              </a>
+              <a class="button button-secondary" href="#quickstart">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 7 7-7 7M16 19h3"/></svg>
+                Quick start
+              </a>
+              <a class="button button-ghost" href="#citation">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17H4V9h6v5a3 3 0 0 1-3 3Zm10 0h-3V9h6v5a3 3 0 0 1-3 3Z"/></svg>
+                Cite
+              </a>
+            </div>
+          </div>
+
+          <div class="hero-visual" data-reveal>
+            <div class="visual-card">
+              <div class="visual-label"><span></span> Attribution space</div>
+              <img src="static/able-overview.svg" alt="Weight space, output space, and attribution space comparison">
+            </div>
+          </div>
+        </div>
+
+        <div class="shell stat-strip" aria-label="Paper at a glance" data-reveal>
+          <div><strong>239</strong><span>open-weight LLMs</span></div>
+          <div><strong>24</strong><span>model families</span></div>
+          <div><strong>1,200</strong><span>multiple-choice probes</span></div>
+          <div><strong>256-D</strong><span>compact embeddings</span></div>
+        </div>
+      </section>
+
+      <section class="section section-light" id="overview">
+        <div class="shell narrow" data-reveal>
+          <p class="section-kicker">One-line summary</p>
+          <h2>Represent how a model uses evidence—not only what it outputs.</h2>
+          <p class="section-intro">
+            Two language models can return the same answer while relying on different parts of the prompt. ABLE aggregates these
+            input-dependence patterns over a shared probing corpus, aligns them across tokenizers, and turns them into reusable
+            model-level embeddings.
+          </p>
+        </div>
+
+        <div class="shell card-grid three-up">
+          <article class="feature-card" data-reveal>
+            <span class="card-index">01</span>
+            <h3>Input-dependence signatures</h3>
+            <p>Option-aware attributions summarize which parts of a shared prompt support each candidate answer.</p>
+          </article>
+          <article class="feature-card" data-reveal>
+            <span class="card-index">02</span>
+            <h3>Cross-tokenizer alignment</h3>
+            <p>Token scores pass through character spans into a shared word–option coordinate system.</p>
+          </article>
+          <article class="feature-card" data-reveal>
+            <span class="card-index">03</span>
+            <h3>Reusable model embeddings</h3>
+            <p>Each embedding is extracted once without updating model parameters, then reused across analyses.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section-dark" id="method">
+        <div class="shell section-heading inverse" data-reveal>
+          <div>
+            <p class="section-kicker">Method</p>
+            <h2>From shared probes to a common model space</h2>
+          </div>
+          <p>ABLE preserves option-specific attribution channels while removing tokenizer-dependent coordinates.</p>
+        </div>
+
+        <div class="shell method-figure" data-reveal>
+          <img src="static/method.png" alt="ABLE pipeline from probing questions and model attributions to compact embeddings">
+        </div>
+
+        <div class="shell method-steps">
+          <article data-reveal>
+            <span>1</span>
+            <h3>Attribute every option</h3>
+            <p>Compute Gradient × Input for every question token with respect to each option's sequence log-probability. Gold labels are not used.</p>
+          </article>
+          <article data-reveal>
+            <span>2</span>
+            <h3>Align across tokenizers</h3>
+            <p>Distribute token scores over character spans, aggregate by whitespace-delimited words, and concatenate all option channels.</p>
+          </article>
+          <article data-reveal>
+            <span>3</span>
+            <h3>Project to 256 dimensions</h3>
+            <p>Apply a Johnson–Lindenstrauss random projection to obtain a compact embedding that supports direct model comparison.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section section-paper" id="results">
+        <div class="shell section-heading" data-reveal>
+          <div>
+            <p class="section-kicker">Evidence</p>
+            <h2>One representation, multiple views of the model ecosystem</h2>
+          </div>
+          <p>Evaluated on a purposive collection of open-weight, decoder-only models spanning families, scales, and training types.</p>
+        </div>
+
+        <div class="shell result-metrics" data-reveal>
+          <article><span>Relation accuracy</span><strong>86.7%</strong><small>± 4.2</small></article>
+          <article><span>Relation precision</span><strong>83.6%</strong><small>± 7.7</small></article>
+          <article><span>Routing accuracy</span><strong>67.6%</strong><small>± 0.1</small></article>
+          <article><span>Benchmark Spearman ρ</span><strong>.81–.89</strong><small>five targets</small></article>
+        </div>
+
+        <div class="shell showcase showcase-wide" data-reveal>
+          <div class="showcase-copy">
+            <p class="mini-label">Model atlas</p>
+            <h3>Family structure and functional affinity emerge in ABLE space</h3>
+            <p>
+              A t-SNE view of the 239 embeddings reveals family-level groupings, while some adapted models move toward models
+              with similar task specialization. The visualization summarizes this curated collection; it is not an estimate of
+              model prevalence in the broader ecosystem.
+            </p>
+          </div>
+          <button class="figure-button" type="button" data-lightbox="static/model-map.png" aria-label="Open model atlas figure">
+            <img src="static/model-map.png" alt="t-SNE model map of 239 ABLE representations" loading="lazy">
+            <span>Open figure</span>
+          </button>
+        </div>
+
+        <div class="shell showcase-grid">
+          <article class="showcase-card" data-reveal>
+            <div class="showcase-copy">
+              <p class="mini-label">Documented relationships</p>
+              <h3>Known family relationships are reflected in embedding geometry</h3>
+              <p>Mistral-derived models form a compatible neighbor-joining tree, while annotated Llama-2 groups separate in ABLE space.</p>
+            </div>
+            <button class="figure-button" type="button" data-lightbox="static/relationships.png" aria-label="Open relationship figure">
+              <img src="static/relationships.png" alt="ABLE relationship analysis for Mistral and Llama-2 models" loading="lazy">
+              <span>Open figure</span>
+            </button>
+          </article>
+
+          <article class="showcase-card" data-reveal>
+            <div class="showcase-copy">
+              <p class="mini-label">Capability signals</p>
+              <h3>Frozen embeddings predict benchmark-score rankings</h3>
+              <p>Leave-one-model-out ridge regression yields Spearman correlations from 0.816 to 0.890 across five leaderboard targets.</p>
+            </div>
+            <button class="figure-button figure-button-tall" type="button" data-lightbox="static/benchmark.png" aria-label="Open benchmark prediction figure">
+              <img src="static/benchmark.png" alt="Reported and ABLE-predicted benchmark scores" loading="lazy">
+              <span>Open figure</span>
+            </button>
+          </article>
+        </div>
+
+        <aside class="shell scope-note" data-reveal>
+          <div class="scope-icon" aria-hidden="true">i</div>
+          <div>
+            <h3>Interpretation matters</h3>
+            <p>
+              Similarity in ABLE space is evidence of related input-dependence patterns—not direct proof of derivation or
+              infringement. Main experiments use Gradient × Input on English multiple-choice probes and require gradient access;
+              black-box evidence in the paper is a controlled Llama-2 case study.
+            </p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="section section-light" id="quickstart">
+        <div class="shell quickstart-grid">
+          <div class="quickstart-copy" data-reveal>
+            <p class="section-kicker">Quick start</p>
+            <h2>Build an ABLE embedding in three commands</h2>
+            <p>
+              This smoke test uses five public probes and <code>sshleifer/tiny-gpt2</code>. The paper setting uses the authorized
+              1,200-probe corpus and the full model list.
+            </p>
+            <p>
+              Run from the root of a cloned checkout. Only the repository-based editable installation is supported; standard
+              non-editable installs and built wheels do not include the repository data resources.
+            </p>
+            <ul class="check-list">
+              <li>Python 3.10 or newer</li>
+              <li>GPU recommended; tiny smoke test can run on CPU</li>
+              <li>Shared Hugging Face cache across attribution stages</li>
+            </ul>
+            <a class="text-link" href="https://github.com/ziiroo1126/ABLE#-how-to-calculate-able-features" target="_blank" rel="noreferrer">
+              Read the complete setup guide <span aria-hidden="true">→</span>
+            </a>
+          </div>
+
+          <div class="terminal" data-reveal>
+            <div class="terminal-bar">
+              <div aria-hidden="true"><i></i><i></i><i></i></div>
+              <span>ABLE quick start</span>
+              <button type="button" data-copy-target="quickstart-code">Copy</button>
+            </div>
+            <pre id="quickstart-code"><code><span class="comment"># Clone ABLE and install its CLI commands in editable mode</span>
+<span class="command">git clone https://github.com/ziiroo1126/ABLE.git</span>
+<span class="command">cd ABLE</span>
+<span class="command">python -m pip install -e .</span>
+
+<span class="comment"># 1. Compute option-aware token attributions</span>
+<span class="command">able-calculate example_models \</span>
+  <span class="argument">--dataset-name ABLE_dataset_public_1000 \</span>
+  <span class="argument">--max-samples 5 --dtype float32 \</span>
+  <span class="argument">--cache-dir ./models</span>
+
+<span class="comment"># 2. Align token attributions at word level</span>
+<span class="command">able-convert \</span>
+  <span class="argument">--input-dir ./able/ABLE_dataset_public_1000 \</span>
+  <span class="argument">--dataset-path ./data/selected_data/ABLE_dataset_public_1000.jsonl \</span>
+  <span class="argument">--output-dir ./able/word_level \</span>
+  <span class="argument">--cache-dir ./models</span>
+
+<span class="comment"># 3. Construct a compact 256-D embedding</span>
+<span class="command">able-project --method jl --dim 256 \</span>
+  <span class="argument">--input-dir ./able/word_level \</span>
+  <span class="argument">--output-dir ./able/able_word_all_options_jl_256_norm</span></code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section citation-section" id="citation">
+        <div class="shell citation-grid">
+          <div data-reveal>
+            <p class="section-kicker">Citation</p>
+            <h2>If ABLE helps your research, please cite our paper.</h2>
+            <p>Accepted to the EMNLP 2026 Main Conference.</p>
+          </div>
+
+          <div class="bibtex" data-reveal>
+            <div class="bibtex-bar">
+              <span>BibTeX</span>
+              <button type="button" data-copy-target="bibtex-code">Copy</button>
+            </div>
+            <pre id="bibtex-code"><code>@article{wang2026able,
+  title={ABLE: Representing and Mapping LLMs via Attribution-Based Large-model Embedding},
+  author={Wang, Zirui and Hou, Yusen and Liang, Shaofeng and Tian, Bowen and Zhang, Yanlin and Chen, Wenshuo and Yue, Yutao},
+  journal={arXiv preprint arXiv:2606.07524},
+  year={2026}
+}</code></pre>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="shell footer-grid">
+        <div>
+          <a class="brand footer-brand" href="#top"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>ABLE</span></a>
+          <p>Attribution-Based Large-model Embedding</p>
+        </div>
+        <div class="footer-links">
+          <a href="https://arxiv.org/abs/2606.07524" target="_blank" rel="noreferrer">Paper</a>
+          <a href="https://github.com/ziiroo1126/ABLE" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="https://github.com/ziiroo1126/ABLE/blob/main/README_zh-CN.md" target="_blank" rel="noreferrer">中文 README</a>
+          <a href="https://github.com/ziiroo1126/ABLE/blob/main/LICENSE" target="_blank" rel="noreferrer">Apache-2.0</a>
+        </div>
+        <p class="footer-note">© <span data-year>2026</span> ABLE authors. Built for GitHub Pages.</p>
+      </div>
+    </footer>
+
+    <dialog class="lightbox" data-lightbox-dialog aria-label="Expanded paper figure">
+      <button type="button" class="lightbox-close" data-lightbox-close aria-label="Close figure">×</button>
+      <img src="static/model-map.png" alt="Expanded paper figure" data-lightbox-image>
+    </dialog>
+  </body>
+</html>

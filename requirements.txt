@@ -1,0 +1,15 @@
+# Versions used by the authors' reference environment (Python 3.10.0).
+torch==2.9.0
+transformers==5.4.0
+accelerate==1.13.0
+huggingface-hub==1.8.0
+captum==0.8.0
+numpy==1.26.4
+pandas==2.3.3
+scikit-learn==1.7.2
+joblib==1.5.2
+tqdm==4.67.1
+loguru==0.7.3
+rich==14.2.0
+PyYAML==6.0.3
+datasets==4.2.0
