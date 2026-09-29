@@ -10,6 +10,8 @@
   <a href="LICENSE">Apache-2.0 许可证</a>
 </p>
 
+<p align="center"><strong>EMNLP 2026 Oral</strong></p>
+
 ABLE（**A**ttribution-**B**ased **L**arge-model **E**mbedding，基于归因的大模型嵌入）是一种在*归因空间*中表示语言模型的免训练框架。与仅通过参数或最终输出来刻画模型不同，ABLE 汇总模型在固定探测语料上如何依赖共享输入证据。
 
 给定多项选择探测样本，ABLE 计算面向各候选选项的特征归因，将依赖 tokenizer 的归因分数对齐到共享的“词–选项”坐标系，再通过随机投影生成紧凑的模型嵌入。每个模型只需计算一次嵌入，之后即可复用于不同的下游分析。

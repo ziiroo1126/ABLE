@@ -10,6 +10,8 @@
   <a href="LICENSE">Apache-2.0 License</a>
 </p>
 
+<p align="center"><strong>EMNLP 2026 Oral</strong></p>
+
 ABLE (**A**ttribution-**B**ased **L**arge-model **E**mbedding) is a
 training-free framework for representing language models in *attribution
 space*. Instead of characterizing a model only by its parameters or final

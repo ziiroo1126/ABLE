@@ -19,6 +19,10 @@ if (navToggle && navLinks) {
   navLinks.querySelectorAll("a").forEach((link) => {
     link.addEventListener("click", closeNavigation);
   });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeNavigation();
+  });
 }
 
 window.addEventListener(
@@ -29,7 +33,8 @@ window.addEventListener(
 
 document.querySelectorAll("[data-copy-target]").forEach((button) => {
   button.addEventListener("click", async () => {
-    const target = document.querySelector(button.dataset.copyTarget);
+    const targetId = button.dataset.copyTarget;
+    const target = targetId ? document.getElementById(targetId) : null;
     if (!target) return;
 
     const originalLabel = button.textContent;
@@ -69,11 +74,16 @@ if ("IntersectionObserver" in window) {
 }
 
 const lightbox = document.querySelector("[data-lightbox-dialog]");
-const lightboxImage = lightbox?.querySelector("img");
+const lightboxImageHost = lightbox?.querySelector("[data-lightbox-image-host]");
+let lightboxImage;
 
 document.querySelectorAll("[data-lightbox]").forEach((button) => {
   button.addEventListener("click", () => {
-    if (!lightbox || !lightboxImage) return;
+    if (!lightbox || !lightboxImageHost) return;
+    if (!lightboxImage) {
+      lightboxImage = document.createElement("img");
+      lightboxImageHost.append(lightboxImage);
+    }
     lightboxImage.src = button.dataset.lightbox;
     lightboxImage.alt = button.dataset.lightboxAlt || "Expanded research figure";
     if (typeof lightbox.showModal === "function") {
@@ -84,12 +94,21 @@ document.querySelectorAll("[data-lightbox]").forEach((button) => {
   });
 });
 
+function closeLightbox() {
+  if (!lightbox) return;
+  if (typeof lightbox.close === "function") {
+    lightbox.close();
+  } else {
+    lightbox.removeAttribute("open");
+  }
+}
+
 lightbox?.querySelector(".lightbox-close")?.addEventListener("click", () => {
-  lightbox.close();
+  closeLightbox();
 });
 
 lightbox?.addEventListener("click", (event) => {
-  if (event.target === lightbox) lightbox.close();
+  if (event.target === lightbox) closeLightbox();
 });
 
 const currentYear = document.querySelector("[data-year]");

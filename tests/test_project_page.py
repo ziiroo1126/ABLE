@@ -9,7 +9,9 @@ class _ProjectPageParser(HTMLParser):
         self.ids = set()
         self.links = []
         self.images = []
+        self.image_attributes = []
         self.assets = []
+        self.copy_targets = []
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
@@ -19,10 +21,13 @@ class _ProjectPageParser(HTMLParser):
             self.links.append(attributes["href"])
         if tag == "img" and "src" in attributes:
             self.images.append(attributes["src"])
+            self.image_attributes.append(attributes)
         if tag == "link" and "href" in attributes:
             self.assets.append(attributes["href"])
         if tag == "script" and "src" in attributes:
             self.assets.append(attributes["src"])
+        if tag == "button" and "data-copy-target" in attributes:
+            self.copy_targets.append(attributes["data-copy-target"])
 
 
 class ProjectPageTests(unittest.TestCase):
@@ -57,6 +62,34 @@ class ProjectPageTests(unittest.TestCase):
         self.assertIn("main", guide)
         self.assertIn("/docs", guide)
         self.assertTrue(Path("docs/.nojekyll").is_file())
+
+    def test_copy_buttons_reference_existing_elements(self):
+        parser = _ProjectPageParser()
+        parser.feed(Path("docs/index.html").read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            {"quickstart-code", "bibtex-code"}, set(parser.copy_targets)
+        )
+        for target in parser.copy_targets:
+            self.assertIn(target, parser.ids, target)
+
+    def test_page_identifies_the_paper_as_an_emnlp_oral(self):
+        page = Path("docs/index.html").read_text(encoding="utf-8")
+        self.assertIn("EMNLP 2026 Oral", page)
+        self.assertNotIn("EMNLP 2026 Main", page)
+
+        for readme in ("README.md", "README_zh-CN.md"):
+            contents = Path(readme).read_text(encoding="utf-8")
+            self.assertIn("EMNLP 2026 Oral", contents)
+            self.assertNotIn("EMNLP 2026 Main", contents)
+
+    def test_content_images_declare_intrinsic_dimensions(self):
+        parser = _ProjectPageParser()
+        parser.feed(Path("docs/index.html").read_text(encoding="utf-8"))
+
+        for image in parser.image_attributes:
+            self.assertIn("width", image, image["src"])
+            self.assertIn("height", image, image["src"])
 
 
 if __name__ == "__main__":
