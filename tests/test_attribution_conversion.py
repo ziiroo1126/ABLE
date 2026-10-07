@@ -4,8 +4,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import torch
+
+from src.calculator.able import ABLECalculator
+from src.prompting import ATTRIBUTION_VERSION
 from src.token_to_word_attribution import (
     character_to_word_attribution,
+    get_question_offset_mapping,
+    load_jsonl,
     main as conversion_main,
     parse_cli_args as parse_conversion_args,
     process_directory,
@@ -42,7 +48,173 @@ class _TokenizerAdapter:
         return {"offset_mapping": _OffsetBatch(self._offsets)}
 
 
+class _CharacterChatTokenizer:
+    chat_template = "reasoning-template"
+
+    def __init__(self):
+        self.calls = []
+
+    def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=False):
+        prompt = f"<bos>user\n{messages[0]['content']}\nassistant\n"
+        if messages[-1]["role"] == "assistant":
+            return prompt + "<think>\n\n</think>\n\n" + messages[-1]["content"]
+        return prompt
+
+    def __call__(
+        self, text, return_tensors=None, return_offsets_mapping=False,
+        add_special_tokens=True,
+    ):
+        self.calls.append((text, add_special_tokens))
+        offsets = [(index, index + 1) for index in range(len(text))]
+        ids = [ord(char) for char in text]
+        if add_special_tokens:
+            offsets.insert(0, (0, 0))
+            ids.insert(0, 0)
+        return {
+            "input_ids": torch.tensor([ids]),
+            "offset_mapping": torch.tensor([offsets]),
+        }
+
+
 class AttributionConversionTests(unittest.TestCase):
+    def test_chat_conversion_uses_the_same_prompt_tokens_as_calculator(self):
+        tokenizer = _CharacterChatTokenizer()
+        calculator = ABLECalculator.__new__(ABLECalculator)
+        calculator.tokenizer = tokenizer
+        calculator.apply_chat_template = True
+        calculator.is_chat_model = True
+        calculator.max_length = 128
+        question, choices = "Pick one", ["A", "B"]
+        (_, tensors, prompt_length, _, _), = calculator._tokenize(
+            [(0, question, choices, 0)]
+        )
+        token_attrs = [float(index + 1) for index in range(prompt_length)]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_dir = root / "input"
+            input_dir.mkdir()
+            dataset_path = root / "dataset.jsonl"
+            save_jsonl(
+                [dict(index=0, question=question, choices=choices, ans_idx=0)],
+                str(dataset_path),
+            )
+            save_jsonl(
+                [dict(
+                    index=0,
+                    ans_idx=0,
+                    input_attrs=[token_attrs, token_attrs],
+                    use_chat_template=True,
+                    attribution_version=ATTRIBUTION_VERSION,
+                )],
+                str(input_dir / "org--model_float32.jsonl"),
+            )
+            tokenizer.calls.clear()
+            with patch(
+                "src.token_to_word_attribution.AutoTokenizer.from_pretrained",
+                return_value=tokenizer,
+            ):
+                succeeded = process_directory(
+                    str(input_dir), str(dataset_path), apply_chat_template=True
+                )
+            output = load_jsonl(
+                str(input_dir / "word_level" / "org--model_float32_word.jsonl")
+            )
+
+        self.assertTrue(succeeded)
+        self.assertEqual(len(tokenizer.calls), len(choices))
+        for (text, add_special_tokens), ids, word_attrs in zip(
+            tokenizer.calls, tensors, output[0]["word_attrs_per_choice"]
+        ):
+            self.assertEqual([ord(char) for char in text], ids[0].tolist())
+            self.assertFalse(add_special_tokens)
+            self.assertNotIn("<think>", text)
+            self.assertAlmostEqual(sum(word_attrs), sum(token_attrs))
+
+    def test_conversion_rejects_mismatched_modes_and_legacy_chat_results(self):
+        cases = [
+            ({}, True),
+            ({"use_chat_template": False}, True),
+            (
+                {"use_chat_template": True, "attribution_version": ATTRIBUTION_VERSION},
+                False,
+            ),
+            ({"use_chat_template": True}, True),
+            ({"use_chat_template": True, "attribution_version": 1}, True),
+        ]
+        for metadata, requested_chat in cases:
+            with self.subTest(metadata=metadata, requested_chat=requested_chat):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    input_dir = root / "input"
+                    input_dir.mkdir()
+                    dataset_path = root / "dataset.jsonl"
+                    save_jsonl(
+                        [dict(index=0, question="Q", choices=["A"], ans_idx=0)],
+                        str(dataset_path),
+                    )
+                    save_jsonl(
+                        [dict(index=0, input_attrs=[[1.0]], **metadata)],
+                        str(input_dir / "org--model_float32.jsonl"),
+                    )
+                    with patch(
+                        "src.token_to_word_attribution.AutoTokenizer.from_pretrained",
+                        return_value=_CharacterChatTokenizer(),
+                    ):
+                        succeeded = process_directory(
+                            str(input_dir), str(dataset_path),
+                            apply_chat_template=requested_chat,
+                        )
+                    self.assertFalse(succeeded)
+                    self.assertFalse(
+                        (input_dir / "word_level" / "org--model_float32_word.jsonl").exists()
+                    )
+
+    def test_conversion_refreshes_existing_output_for_added_samples_and_changed_dataset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_dir = root / "input"
+            input_dir.mkdir()
+            dataset_path = root / "dataset.jsonl"
+            source = input_dir / "org--model_float32.jsonl"
+            output = input_dir / "word_level" / "org--model_float32_word.jsonl"
+            dataset = [
+                dict(index=index, question="Hi all", choices=["A"], ans_idx=0)
+                for index in (0, 1)
+            ]
+            first = dict(index=0, ans_idx=0, input_attrs=[[1.0, 2.0, 3.0, 4.0, 5.0]])
+            second = dict(index=1, ans_idx=0, input_attrs=[[2.0] * 5])
+            save_jsonl(dataset, str(dataset_path))
+            save_jsonl([first], str(source))
+            tokenizer = _TokenizerAdapter(
+                [(0, 0), (0, 2), (2, 3), (3, 6), (6, 7), (7, 8)]
+            )
+            with patch(
+                "src.token_to_word_attribution.AutoTokenizer.from_pretrained",
+                return_value=tokenizer,
+            ):
+                self.assertTrue(process_directory(str(input_dir), str(dataset_path)))
+                self.assertEqual(len(load_jsonl(str(output))), 1)
+                save_jsonl([first, second], str(source))
+                self.assertTrue(process_directory(str(input_dir), str(dataset_path)))
+                self.assertEqual(
+                    [item["index"] for item in load_jsonl(str(output))], [0, 1]
+                )
+                dataset[0]["question"] = "H iall"
+                save_jsonl(dataset, str(dataset_path))
+                self.assertTrue(process_directory(
+                    str(input_dir), str(dataset_path), skip_existing=True
+                ))
+            self.assertEqual(
+                load_jsonl(str(output))[0]["word_attrs_per_choice"], [[3.0, 12.0]]
+            )
+
+    def test_choice_token_overlapping_the_prompt_boundary_is_excluded_from_question(self):
+        tokenizer = _TokenizerAdapter([(0, 1), (1, 3)])
+        self.assertEqual(
+            get_question_offset_mapping("Q\n", "Q\nA", tokenizer), [(0, 1)]
+        )
+
     def test_jsonl_write_preserves_existing_output_when_serialization_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

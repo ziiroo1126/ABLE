@@ -103,7 +103,42 @@ able-project \
     --output-dir ./able/able_word_all_options_jl_256_norm
 ```
 
-最终嵌入会以每个模型一个 JSON 文件的形式写入指定输出目录。如需运行论文配置，请先重建授权的 1,200 条探测语料，将 `example_models` 替换为 `model_list`，移除 `--max-samples`，选择所需 dtype，并仅对确实需要自定义建模代码的仓库启用 `--trust-remote-code`。
+最终嵌入会以每个模型一个 JSON 文件的形式写入指定输出目录。
+
+### 使用论文的完整 1,200 条探测语料
+
+完成上文的授权语料重建后，归因计算和词级转换都需要使用完整数据集。以下命令处理论文模型清单中的所有模型和全部样本，并使用独立于冒烟测试的输出目录：
+
+```bash
+CUDA_VISIBLE_DEVICES=0 able-calculate model_list \
+    --dataset-name ABLE_dataset_1200 \
+    --dtype bfloat16 \
+    --cache-dir ./models \
+    --log-name paper-1200.log
+
+able-convert \
+    --input-dir ./able/ABLE_dataset_1200 \
+    --dataset-path ./data/selected_data/ABLE_dataset_1200.jsonl \
+    --output-dir ./able/word_level_1200 \
+    --cache-dir ./models
+
+able-project \
+    --method jl \
+    --dim 256 \
+    --norm-mode pre \
+    --input-dir ./able/word_level_1200 \
+    --output-dir ./able/able_word_1200_all_options_jl_256_prenorm
+```
+
+上述命令采用论文描述的投影前 L2 归一化变体。请根据硬件和模型选择受支持的 dtype，并仅对确实需要自定义建模代码的模型仓库启用 `--trust-remote-code`。安装依赖中包含 PEFT，可加载 `model_list` 中仅提供 LoRA 适配器权重的检查点；对应基础模型也需要能够访问或已缓存。
+
+### 升级已有结果
+
+词元归因续算会检查聊天模板模式和 `attribution_version`（当前为 `2`）。旧版本或配置不兼容的记录会重新计算，成功后替换原记录；计算失败时保留旧文件。兼容记录仍可增量续算。如需保留多种实验配置，请分别使用独立的数据集／输出目录。
+
+词级转换现在默认重新生成已有输出，旧的 `--no-skip-existing` 参数仍可使用。旧版聊天模板归因必须先重新计算为版本 `2`；如果源词元归因启用了 `--apply-chat-template`，转换时也应启用该参数。
+
+每个投影输入目录中，同一模型只能包含一种 dtype。若存在同模型多 dtype 文件，程序会在写入结果前报错，请按 dtype 分开输入和输出目录。对于 JL，`--norm-mode pre` 仅在投影前进行 L2 归一化，`post` 仅在投影后进行，`both` 在前后都进行。默认值仍为 `post`；自动输出目录分别使用 `_prenorm`、`_norm`、`_bothnorm` 后缀。如需修正后的 `pre` 或 `both` 行为，请重新运行投影。
 
 ### 🗂️ 数据格式
 

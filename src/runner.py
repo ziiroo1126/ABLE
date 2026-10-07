@@ -7,6 +7,7 @@ from .io.able_data import ABLEDataManager
 from .io.model_data import ModelDataLoader
 from .logging.logger import LoggerABLE
 from .calculator.able import ABLECalculator
+from .prompting import ATTRIBUTION_VERSION
 from config._config import get_log_ABLE_dir, get_models_path
 
 
@@ -54,8 +55,17 @@ class RunnerABLE:
             self.log_name = f"{textdata_name}_{now}.log"
         self.logger = LoggerABLE(log_dir, self.log_name)
 
+    def _get_data_manager(self, model_name: str) -> ABLEDataManager:
+        return ABLEDataManager(
+            self.textdata_name, model_name, self.dtype_str,
+            expected_metadata={
+                "use_chat_template": self.apply_chat_template,
+                "attribution_version": ATTRIBUTION_VERSION,
+            },
+        )
+
     def _get_uncomputed_texts(self, model_name: str):
-        data_manager = ABLEDataManager(self.textdata_name, model_name, self.dtype_str)
+        data_manager = self._get_data_manager(model_name)
         computed_idx = data_manager.load_computed_idx()
         uncomputed_idx = sorted(list[int](set(self.textindex_list) - set(computed_idx)))
         if not uncomputed_idx:
@@ -67,7 +77,7 @@ class RunnerABLE:
             return uncomputed_texts
 
     def _compute_able(self, model_name: str) -> bool:
-        data_manager = ABLEDataManager(self.textdata_name, model_name, self.dtype_str)
+        data_manager = self._get_data_manager(model_name)
         texts_to_process = self._get_uncomputed_texts(model_name)
         if texts_to_process is None:
             self.logger.log_finish(model_name, "FINISH (already computed)")

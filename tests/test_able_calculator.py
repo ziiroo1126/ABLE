@@ -4,6 +4,7 @@ from unittest.mock import patch
 import torch
 
 from src.calculator.able import ABLECalculator
+from src.prompting import ATTRIBUTION_VERSION
 
 
 class _TokenizerWithSharedPadAndEos:
@@ -60,7 +61,84 @@ class _CaptumLayerAdapter:
         return torch.ones((*inputs.shape, 2), device=inputs.device)
 
 
+class _ReasoningChatTokenizer:
+    chat_template = "reasoning-template"
+
+    def __init__(self, supports_offsets=True):
+        self.calls = []
+        self.assistant_template_calls = 0
+        self.supports_offsets = supports_offsets
+
+    def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=False):
+        prompt = f"<bos>user\n{messages[0]['content']}\nassistant\n"
+        if messages[-1]["role"] == "assistant":
+            self.assistant_template_calls += 1
+            return prompt + "<think>\n\n</think>\n\n" + messages[-1]["content"]
+        return prompt
+
+    def __call__(
+        self, text, return_tensors=None, return_offsets_mapping=False,
+        add_special_tokens=True,
+    ):
+        self.calls.append((text, add_special_tokens))
+        if return_offsets_mapping and not self.supports_offsets:
+            raise NotImplementedError("Slow tokenizer does not provide offsets")
+        ids = [ord(char) for char in text]
+        offsets = [(index, index + 1) for index in range(len(text))]
+        if add_special_tokens:
+            ids.insert(0, 0)
+            offsets.insert(0, (0, 0))
+        encoded = {"input_ids": torch.tensor([ids])}
+        if return_offsets_mapping:
+            encoded["offset_mapping"] = torch.tensor([offsets])
+        return encoded
+
+
+class _TokenPreferenceModel:
+    def __call__(self, input_ids, attention_mask, use_cache=False):
+        logits = torch.arange(128, dtype=torch.float32).expand(*input_ids.shape, 128)
+        return type("ModelOutput", (), {"logits": logits})()
+
+
 class AbleCalculatorTests(unittest.TestCase):
+    def test_chat_scoring_targets_choices_without_inserting_reasoning_or_duplicate_bos(self):
+        for supports_offsets in (True, False):
+            with self.subTest(supports_offsets=supports_offsets):
+                calculator = ABLECalculator.__new__(ABLECalculator)
+                tokenizer = _ReasoningChatTokenizer(supports_offsets)
+                calculator.tokenizer = tokenizer
+                calculator.apply_chat_template = True
+                calculator.is_chat_model = True
+                calculator.max_length = 128
+                calculator.model = _TokenPreferenceModel()
+
+                (_, tensors, prompt_length, _, choice_lengths), = calculator._tokenize(
+                    [(0, "Pick an option", ["A", "B"], 0)]
+                )
+                expected_scores = torch.log_softmax(
+                    torch.arange(128, dtype=torch.float32), dim=0
+                )
+                self.assertEqual(choice_lengths, [1, 1])
+                for choice, tokens, length in zip(
+                    ["A", "B"], tensors, choice_lengths
+                ):
+                    self.assertEqual(
+                        tokens[0, prompt_length:].tolist(), [ord(choice)]
+                    )
+                    actual_score = calculator._model_forward(
+                        tokens,
+                        torch.tensor([length]),
+                        prompt_length,
+                        torch.ones_like(tokens),
+                    )
+                    self.assertAlmostEqual(
+                        actual_score.item(), expected_scores[ord(choice)].item()
+                    )
+                self.assertEqual(tokenizer.assistant_template_calls, 0)
+                self.assertTrue(
+                    all(not add_special for _, add_special in tokenizer.calls)
+                )
+
     def test_choice_scoring_aligns_inputs_with_a_different_output_device(self):
         calculator = ABLECalculator.__new__(ABLECalculator)
         calculator.model = _MetaOutputCausalModel()
@@ -91,7 +169,10 @@ class AbleCalculatorTests(unittest.TestCase):
             "src.calculator.able.LayerGradientXActivation",
             _CaptumLayerAdapter,
         ):
-            calculator([(0, "Q", ["A", "B"], 0)])
+            results = calculator([(0, "Q", ["A", "B"], 0)])
+
+        self.assertEqual(results[0]["attribution_version"], ATTRIBUTION_VERSION)
+        self.assertFalse(results[0]["use_chat_template"])
 
         self.assertEqual(
             [[1, 1, 1, 1], [1, 1, 1, 0]],

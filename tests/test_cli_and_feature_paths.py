@@ -10,6 +10,7 @@ from src.calculate_able import (
     parse_args as parse_calculate_args,
 )
 from src.process_able_features import (
+    get_output_dir_name,
     model_name_from_word_file,
     parse_args as parse_feature_args,
 )
@@ -42,6 +43,23 @@ class CalculateAbleCliTest(unittest.TestCase):
 
 
 class FeaturePathTest(unittest.TestCase):
+    def test_default_post_normalization_output_path_remains_compatible(self):
+        self.assertEqual(
+            get_output_dir_name(parse_feature_args([])),
+            "./able/able_word_all_options_jl_256_norm",
+        )
+
+    def test_normalization_modes_have_distinct_default_output_directories(self):
+        for method in ("jl", "pca", "none"):
+            with self.subTest(method=method):
+                output_dirs = {
+                    get_output_dir_name(
+                        parse_feature_args(["--method", method, "--norm-mode", mode])
+                    )
+                    for mode in ("pre", "post", "both", "none")
+                }
+                self.assertEqual(len(output_dirs), 4)
+
     def test_default_family_file_exists_in_public_layout(self):
         args = parse_feature_args([])
         self.assertEqual(args.family_file, "./data/models/model-family.csv")

@@ -21,6 +21,12 @@ from typing import List, Dict, Tuple, Optional, Sequence
 from loguru import logger
 from transformers import AutoTokenizer
 from rich.progress import track
+from .prompting import (
+    ATTRIBUTION_VERSION,
+    build_question_prompt,
+    choice_start_from_offsets,
+    tokenize_prompt_text,
+)
 
 
 # ============================================================================
@@ -85,6 +91,7 @@ def get_question_offset_mapping(
     question_prompt_str: str,
     full_text: str,
     tokenizer,
+    use_chat_template: bool = False,
 ) -> List[Tuple[int, int]]:
     """Get token offset mapping for the question part.
 
@@ -92,25 +99,22 @@ def get_question_offset_mapping(
         question_prompt_str: Question text (including trailing newline)
         full_text: Complete text (question + choice)
         tokenizer: HuggingFace tokenizer
+        use_chat_template: Whether special tokens are already present in the prompt
 
     Returns:
         Character range for each token in question part [(start, end), ...]
     """
     q_char_len = len(question_prompt_str)
 
-    enc = tokenizer(
+    enc = tokenize_prompt_text(
         full_text,
-        return_tensors="pt",
+        tokenizer,
+        use_chat_template=use_chat_template,
         return_offsets_mapping=True,
     )
     offsets = enc["offset_mapping"][0].tolist()
 
-    # Find first token belonging to choice part (start >= q_char_len)
-    for i, (start, end) in enumerate(offsets):
-        if start >= q_char_len:
-            return offsets[:i]
-
-    return offsets
+    return offsets[:choice_start_from_offsets(offsets, q_char_len)]
 
 
 def token_to_character_attribution(
@@ -118,6 +122,7 @@ def token_to_character_attribution(
     full_text: str,
     token_attrs: List[float],
     tokenizer,
+    use_chat_template: bool = False,
 ) -> List[float]:
     """Convert token-level attribution to character-level attribution.
 
@@ -130,6 +135,7 @@ def token_to_character_attribution(
         full_text: Complete text (question + choice)
         token_attrs: List of token-level attribution values
         tokenizer: HuggingFace tokenizer
+        use_chat_template: Whether special tokens are already present in the prompt
 
     Returns:
         List of character-level attribution values, length equals question_prompt_str characters
@@ -138,6 +144,7 @@ def token_to_character_attribution(
         question_prompt_str=question_prompt_str,
         full_text=full_text,
         tokenizer=tokenizer,
+        use_chat_template=use_chat_template,
     )
 
     # Check length match
@@ -252,7 +259,7 @@ def process_directory(
     dataset_path: str,
     output_dir: str = None,
     apply_chat_template: bool = False,
-    skip_existing: bool = True,
+    skip_existing: bool = False,
     target_models: List[str] = None,
     local_files_only: bool = False,
     trust_remote_code: bool = False,
@@ -265,13 +272,15 @@ def process_directory(
         dataset_path: Dataset path containing question and choices
         output_dir: Output directory, default is input_dir/word_level
         apply_chat_template: Whether to use chat template for question formatting
-        skip_existing: Whether to skip existing output files
+        skip_existing: Deprecated compatibility argument; outputs are always regenerated.
         target_models: List of models to process (HuggingFace format). If None, process all models.
         local_files_only: Whether to restrict tokenizer loading to the local cache.
         trust_remote_code: Whether to allow custom code from model repositories.
         cache_dir: Optional Hugging Face cache directory for tokenizer files.
     """
     input_path = Path(input_dir)
+    if skip_existing:
+        logger.warning("skip_existing is deprecated; selected outputs are always regenerated")
     if not input_path.exists():
         raise FileNotFoundError(f"Input directory not found: {input_dir}")
 
@@ -301,11 +310,6 @@ def process_directory(
         filename = jsonl_file.name
         output_file = output_path / f"{jsonl_file.stem}_word.jsonl"
 
-        # Skip existing files
-        if skip_existing and output_file.exists():
-            logger.info(f"Skipping {filename} (output exists)")
-            continue
-
         # Parse model name and load tokenizer
         model_name = parse_model_name_from_filename(filename)
 
@@ -328,13 +332,22 @@ def process_directory(
             succeeded = False
             continue
 
-        is_chat_model = (
-            hasattr(tokenizer, "chat_template") and tokenizer.chat_template is not None
-        )
-
         # Load attribution data
         try:
             attributions = load_jsonl(str(jsonl_file))
+            for item in attributions:
+                source_chat_template = item.get("use_chat_template", False)
+                if source_chat_template != apply_chat_template:
+                    raise ValueError(
+                        f"Sample [{item['index']}] chat-template mode differs from conversion mode"
+                    )
+                if (
+                    source_chat_template
+                    and item.get("attribution_version") != ATTRIBUTION_VERSION
+                ):
+                    raise ValueError(
+                        f"Sample [{item['index']}] uses legacy chat attributions; recompute with able-calculate"
+                    )
         except Exception as e:
             logger.error(f"Failed to load {filename}: {e}")
             succeeded = False
@@ -352,16 +365,9 @@ def process_directory(
             question = data_item["question"]
             choices = data_item["choices"]
 
-            # Build question prompt
-            if apply_chat_template and is_chat_model:
-                user_messages = [{"role": "user", "content": question}]
-                question_prompt_str = tokenizer.apply_chat_template(
-                    user_messages, tokenize=False, add_generation_prompt=True
-                )
-            else:
-                question_prompt_str = (
-                    question if question.endswith("\n") else f"{question}\n"
-                )
+            question_prompt_str, use_chat_template = build_question_prompt(
+                question, tokenizer, apply_chat_template
+            )
 
             input_attrs = attr_item.get("input_attrs", [])
 
@@ -375,17 +381,7 @@ def process_directory(
             for choice_idx, token_attrs in enumerate(input_attrs):
                 choice = choices[choice_idx] if choice_idx < len(choices) else ""
 
-                # Build full text
-                if apply_chat_template and is_chat_model:
-                    full_messages = [
-                        {"role": "user", "content": question},
-                        {"role": "assistant", "content": choice},
-                    ]
-                    full_text = tokenizer.apply_chat_template(
-                        full_messages, tokenize=False, add_generation_prompt=False
-                    )
-                else:
-                    full_text = question_prompt_str + choice
+                full_text = question_prompt_str + choice
 
                 # Token -> Character
                 char_attrs = token_to_character_attribution(
@@ -393,6 +389,7 @@ def process_directory(
                     full_text=full_text,
                     token_attrs=token_attrs,
                     tokenizer=tokenizer,
+                    use_chat_template=use_chat_template,
                 )
 
                 # Character -> Word
@@ -475,7 +472,7 @@ def parse_cli_args(argv: Sequence[str] | None = None):
     parser.add_argument(
         "--no-skip-existing",
         action="store_true",
-        help="Re-process files even if output exists"
+        help="Deprecated compatibility flag; output files are always regenerated"
     )
     parser.add_argument(
         "--local-files-only",
@@ -498,7 +495,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         dataset_path=args.dataset_path,
         output_dir=args.output_dir,
         apply_chat_template=args.apply_chat_template,
-        skip_existing=not args.no_skip_existing,
         target_models=None,
         cache_dir=str(args.cache_dir) if args.cache_dir is not None else None,
         local_files_only=args.local_files_only,

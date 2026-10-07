@@ -133,12 +133,14 @@ def get_output_dir_name(args) -> str:
     if args.method == "pca":
         dim_suffix = f"var{int(args.pca_variance * 100)}"
         norm_suffix = f"_{args.norm_mode}norm"
-    elif args.method == "jl":
-        dim_suffix = str(args.dim)
-        norm_suffix = "_nonorm" if args.norm_mode == "none" else "_norm"
     else:
-        dim_suffix = "full"
-        norm_suffix = "_nonorm" if args.norm_mode == "none" else "_norm"
+        dim_suffix = str(args.dim) if args.method == "jl" else "full"
+        norm_suffix = {
+            "pre": "_prenorm",
+            "post": "_norm",
+            "both": "_bothnorm",
+            "none": "_nonorm",
+        }[args.norm_mode]
 
     return f"./able/able_word_{feature_mode}_{args.method}_{dim_suffix}{norm_suffix}"
 
@@ -222,6 +224,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Error: No word-attribution files found in {input_dir}")
         return 1
 
+    files_by_model: Dict[str, Path] = {}
+    for file_path in files:
+        model_name = model_name_from_word_file(file_path)
+        if model_name in files_by_model:
+            print(
+                f"Error: Multiple input files resolve to model {model_name}: "
+                f"{files_by_model[model_name].name}, {file_path.name}. "
+                "Process different dtypes in separate input/output directories."
+            )
+            return 1
+        files_by_model[model_name] = file_path
+
     all_results = []
 
     mode_desc = "correct option only" if args.correct_only else "all options"
@@ -279,14 +293,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"Skipping post-normalization for PCA...")
 
     elif args.method == "jl":
-        use_norm = args.norm_mode != "none"
+        do_prenorm = args.norm_mode in ("pre", "both")
+        do_postnorm = args.norm_mode in ("post", "both")
 
-        if use_norm:
-            effective_mode = "norm"
-            print(f"\n[JL] Normalization mode '{args.norm_mode}' -> using post-normalization (pre/post/both are equivalent for JL)")
+        if do_prenorm:
+            print(f"\nApplying L2 normalization before JL projection...")
+            feature_matrix = normalize(feature_matrix, norm='l2', axis=1)
         else:
-            effective_mode = "none"
-            print(f"\n[JL] No normalization will be applied (preserving original scale)")
+            print(f"\nSkipping pre-normalization for JL...")
 
         print(f"Applying Johnson-Lindenstrauss random projection to reduce dimensions to {args.dim}...")
 
@@ -294,11 +308,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         projected_matrix = projector.fit_transform(feature_matrix)
         final_dim = args.dim
 
-        if use_norm:
+        if do_postnorm:
             print(f"Applying L2 normalization after JL projection...")
             projected_matrix = normalize(projected_matrix, norm='l2', axis=1)
         else:
-            print(f"Skipping normalization for JL (none mode)...")
+            print(f"Skipping post-normalization for JL...")
 
     else:  # none (no dimensionality reduction)
         print(f"\nNo dimensionality reduction applied.")

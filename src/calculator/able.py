@@ -17,6 +17,12 @@ except ImportError:
 
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from captum.attr import LayerGradientXActivation
+from ..prompting import (
+    ATTRIBUTION_VERSION,
+    build_question_prompt,
+    choice_start_from_offsets,
+    tokenize_prompt_text,
+)
 
 
 class ABLECalculator:
@@ -146,6 +152,7 @@ class ABLECalculator:
                 "able": None,
                 "ans_idx": ans_idx,
                 "use_chat_template": self.apply_chat_template,
+                "attribution_version": ATTRIBUTION_VERSION,
             }
 
             def forward_wrapper(inputs, c_lens, mask):
@@ -247,61 +254,37 @@ class ABLECalculator:
             tokenized: List[torch.Tensor] = []
             choice_lens: List[int] = []
 
-            if self.apply_chat_template and self.is_chat_model:
-                user_messages = [{"role": "user", "content": question}]
-                question_prompt_str = self.tokenizer.apply_chat_template(
-                    user_messages, tokenize=False, add_generation_prompt=True
-                )
-            else:
-                question_prompt_str = (
-                    question if question.endswith(("\n")) else f"{question}\n"
-                )
+            question_prompt_str, use_chat_template = build_question_prompt(
+                question, self.tokenizer, self.apply_chat_template
+            )
             q_char_len = len(question_prompt_str)
             final_split_idx = -1
 
             for c in choices:
-                if self.apply_chat_template and self.is_chat_model:
-                    user_messages = [{"role": "user", "content": question}]
-                    full_messages = user_messages + [
-                        {"role": "assistant", "content": c}
-                    ]
-                    full_prompt_str = self.tokenizer.apply_chat_template(
-                        full_messages, tokenize=False, add_generation_prompt=False
-                    )
-                else:
-                    full_prompt_str = question_prompt_str + c
+                full_prompt_str = question_prompt_str + c
 
                 try:
-                    enc = self.tokenizer(
+                    enc = tokenize_prompt_text(
                         full_prompt_str,
-                        return_tensors="pt",
+                        self.tokenizer,
+                        use_chat_template=use_chat_template,
                         return_offsets_mapping=True,
                     )
                     full_ids = enc["input_ids"]
                     offsets = enc["offset_mapping"][0]
 
-                    split_idx = full_ids.shape[1]
-                    for i, (start, end) in enumerate(offsets):
-                        if start >= q_char_len:
-                            split_idx = i
-                            break
+                    split_idx = choice_start_from_offsets(offsets, q_char_len)
                 except Exception as e:
                     logger.warning(
                         f"Offset mapping failed for index {index}: {e}. Falling back to length count."
                     )
-                    full_ids = self.tokenizer(full_prompt_str, return_tensors="pt")[
-                        "input_ids"
-                    ]
-                    if self.apply_chat_template and self.is_chat_model:
-                        q_ids = self.tokenizer(
-                            question_prompt_str, return_tensors="pt"
-                        )["input_ids"]
-                        split_idx = q_ids.shape[1]
-                    else:
-                        q_ids = self.tokenizer(
-                            question_prompt_str, return_tensors="pt"
-                        )["input_ids"]
-                        split_idx = q_ids.shape[1]
+                    full_ids = tokenize_prompt_text(
+                        full_prompt_str, self.tokenizer, use_chat_template
+                    )["input_ids"]
+                    q_ids = tokenize_prompt_text(
+                        question_prompt_str, self.tokenizer, use_chat_template
+                    )["input_ids"]
+                    split_idx = q_ids.shape[1]
 
                 if full_ids.shape[1] > self.max_length:
                     self._over_length_indices.append(index)
@@ -311,18 +294,17 @@ class ABLECalculator:
 
                 if final_split_idx == -1:
                     final_split_idx = split_idx
+                elif split_idx != final_split_idx:
+                    raise ValueError(
+                        f"Sample [{index}] has different prompt token boundaries across choices"
+                    )
 
-                if self.apply_chat_template and self.is_chat_model:
-                    pure_prompt_str = question_prompt_str + c
-                    pure_ids = self.tokenizer(pure_prompt_str, return_tensors="pt")[
-                        "input_ids"
-                    ]
-                    curr_choice_len = pure_ids.shape[1] - split_idx
-                else:
-                    curr_choice_len = full_ids.shape[1] - split_idx
+                curr_choice_len = full_ids.shape[1] - split_idx
 
-                if curr_choice_len <= 0:
-                    curr_choice_len = 1
+                if split_idx <= 0 or curr_choice_len <= 0:
+                    raise ValueError(
+                        f"Sample [{index}] must contain prompt and answer tokens"
+                    )
 
                 choice_lens.append(curr_choice_len)
                 tokenized.append(full_ids)

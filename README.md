@@ -148,10 +148,62 @@ able-project \
 ```
 
 The final embedding is written below the selected output directory as one JSON
-file per model. To run the paper configuration, first reconstruct the authorized
-1,200-example corpus, use `model_list` instead of `example_models`, remove
-`--max-samples`, select the desired dtype, and enable `--trust-remote-code` only
-for repositories that require it.
+file per model.
+
+### Run the full 1,200-example paper corpus
+
+After reconstructing the authorized corpus as described above, use the full
+dataset in both extraction and conversion. The following commands process all
+samples for the paper's model list and keep their outputs separate from the
+smoke test:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 able-calculate model_list \
+    --dataset-name ABLE_dataset_1200 \
+    --dtype bfloat16 \
+    --cache-dir ./models \
+    --log-name paper-1200.log
+
+able-convert \
+    --input-dir ./able/ABLE_dataset_1200 \
+    --dataset-path ./data/selected_data/ABLE_dataset_1200.jsonl \
+    --output-dir ./able/word_level_1200 \
+    --cache-dir ./models
+
+able-project \
+    --method jl \
+    --dim 256 \
+    --norm-mode pre \
+    --input-dir ./able/word_level_1200 \
+    --output-dir ./able/able_word_1200_all_options_jl_256_prenorm
+```
+
+This selects the pre-projection L2 normalization variant described in the paper.
+Choose a dtype supported by your hardware and models. Enable
+`--trust-remote-code` only for model repositories that require it. The installed
+PEFT dependency also supports the adapter-only LoRA checkpoints in `model_list`;
+their base models must be accessible or cached.
+
+### Updating existing results
+
+Token extraction checks both the chat-template mode and `attribution_version`
+(currently `2`) before resuming. Older or incompatible records are recomputed;
+successful results replace them, while a failed calculation preserves the old
+file. Compatible results can still be resumed incrementally. Use separate
+dataset/output directories to retain different experimental configurations.
+
+Word conversion now recomputes existing outputs by default; the legacy
+`--no-skip-existing` flag remains accepted. Old chat-template attributions must
+first be regenerated with version `2`. Pass `--apply-chat-template` to conversion
+when it was used for the source token attributions.
+
+Keep only one dtype per model in each projection input directory. Projection
+rejects duplicate model names across dtypes before writing results; use separate
+input and output directories for each dtype. For JL, `--norm-mode pre` applies
+L2 normalization only before projection, `post` only after it, and `both` at both
+stages. The default remains `post`; automatically named directories use
+`_prenorm`, `_norm`, and `_bothnorm`, respectively. Rerun projection when you
+need the corrected `pre` or `both` behavior.
 
 ### 🗂️ Data Formats
 
